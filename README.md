@@ -1,4 +1,4 @@
-# OoC-QA: private technical candidate
+# OoC-QA — Competition Core release candidate (PRIVATE)
 
 Retrospective group-held-out OOF replay — not new-image inference.
 
@@ -24,8 +24,8 @@ python -m unittest discover -s tests -v
 python -m streamlit run app/streamlit_app.py --global.developmentMode false --server.headless true --browser.gatherUsageStats false
 ```
 
-The documented dependency versions were inspected in the CPU test environment. Installation
-in a clean independent environment has not been certified. The metric evaluator uses only the
+The documented dependency versions were inspected in the CPU test environment. A clean independent Windows CPU installation was tested in the prior 2026-10-08 audit;
+this release copy is tested again without changing frozen predictions. The metric evaluator uses only the
 Python standard library and requires no paid service. Backend/Streamlit tests passed locally.
 No Torch, GPU, API key, paid account or external model is required for this replay.
 
@@ -74,7 +74,7 @@ No serialized PCA/scaler/LR deployment bundle was located in AI4S_OOC. New-image
 
 ## Rights and release
 
-PRIVATE CANDIDATE. No code license has been selected or granted. Do not publish this directory
+PRIVATE CANDIDATE. Apache-2.0 is the documented candidate for eligible original code; no final license grant is applied. Do not publish this directory
 until the owner approves a competition-compatible license and the release blockers are closed.
 Existing microscopy, pretrained extractor and libraries are preexisting work. Competition work
 includes group-safe evaluation, fold-local PCA-LR OOF, evidence abstention and contextual replay;
@@ -82,3 +82,5 @@ this technical audit adds integrity tests/documentation without changing frozen 
 Commercial integrations/services/brand development are reserved separately. Essential scientific
 reproduction code may not be hidden in a Commercial Core. No clinical or external-validation claim.
 
+## Release review
+See REPRODUCTION_STATUS.md for L1/L2 versus incomplete L3 and LICENSE_SCOPE.md for per-component rights. scientific_reproduction_draft/ is preserved as unexecuted candidate methodology, not a certified training pipeline. No implemented proprietary Commercial Core is claimed.

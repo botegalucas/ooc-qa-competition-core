@@ -1,0 +1,160 @@
+from pathlib import Path
+import numpy as np, pandas as pd
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import HistGradientBoostingClassifier, ExtraTreesClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.metrics import roc_auc_score, balanced_accuracy_score, accuracy_score
+
+ROOT=Path('/teamspace/studios/this_studio/AI4S_OOC')
+
+# ----- 21 leakage-safe groups -----
+g=pd.read_csv(ROOT/'oocqa_dependency_groups_v1.csv',dtype={'imageID':str})
+g['campaign']=g.conservative_1d_campaign_group.astype(str)
+par={x:x for x in g.campaign.unique()}
+def find(x):
+    while par[x]!=x:
+        par[x]=par[par[x]];x=par[x]
+    return x
+def union(a,b):
+    a,b=find(a),find(b)
+    if a!=b: par[b]=a
+for _,z in g[g.near_duplicate_component.notna()].groupby('near_duplicate_component'):
+    cs=z.campaign.unique().tolist()
+    for c in cs[1:]: union(cs[0],c)
+g['group_safe']=g.campaign.map(find)
+
+# ----- data -----
+eff=pd.read_csv(ROOT/'efficientnet_patch_aspect_embeddings_3072.csv',dtype={'imageID':str})
+res=pd.read_csv(ROOT/'resnet18_embeddings_all_3072.csv',dtype={'imageID':str})
+hand=pd.read_csv(ROOT/'oocqa_handcrafted_qc_features.csv',dtype={'imageID':str})
+spat=pd.read_csv(ROOT/'oocqa_spatial_qc_features.csv',dtype={'imageID':str})
+mob=pd.read_csv(ROOT/'mobilenetv3_small_patch_embeddings_3072.csv',dtype={'imageID':str})
+
+base=g[['imageID','group_safe']].merge(eff,on='imageID',how='inner')
+base=base.merge(res[['imageID']+[f'e{i}' for i in range(512)]],on='imageID',how='inner')
+base=base.merge(hand,on='imageID',how='inner',suffixes=('','_hand'))
+base=base.merge(spat,on='imageID',how='inner',suffixes=('','_spat'))
+base=base.merge(mob[['imageID']+[f'mg{i}' for i in range(576)]],on='imageID',how='inner')
+base['y']=(base['label'].astype(str).str.lower()=='bad').astype(int)
+y=base.y.to_numpy(); groups=base.group_safe.astype(str).to_numpy()
+print('rows',len(base),'groups',len(np.unique(groups)),'bad',int(y.sum()),flush=True)
+
+# candidate matrices
+X={}
+X['eff_patch_mean']=base[[f'm{i}' for i in range(1280)]].to_numpy(np.float32)
+X['eff_patch_max']=base[[f'x{i}' for i in range(1280)]].to_numpy(np.float32)
+X['eff_global']=base[[f'g{i}' for i in range(1280)]].to_numpy(np.float32)
+X['resnet18']=base[[f'e{i}' for i in range(512)]].to_numpy(np.float32)
+X['mobile_global']=base[[f'mg{i}' for i in range(576)]].to_numpy(np.float32)
+
+hand_cols=[c for c in hand.columns if c not in {'imageID','zip_path','split','label','cell_type_path','day_group_path'} and pd.api.types.is_numeric_dtype(hand[c])]
+X['hand_hgb']=base[hand_cols].replace([np.inf,-np.inf],np.nan).to_numpy(float)
+
+spat_cols=[c for c in spat.columns if c not in {'imageID','label','cell_type'} and pd.api.types.is_numeric_dtype(spat[c])]
+X['spatial_extra']=base[spat_cols].replace([np.inf,-np.inf],np.nan).to_numpy(float)
+
+names=list(X)
+print('candidates',names,flush=True)
+
+def make_model(name,seed):
+    if name.startswith('eff_') or name=='resnet18' or name=='mobile_global':
+        ncomp=min(100,X[name].shape[1])
+        return Pipeline([
+          ('sc',StandardScaler()),
+          ('pca',PCA(n_components=ncomp,random_state=42)),
+          ('lr',LogisticRegression(max_iter=5000,class_weight='balanced',C=1.0))
+        ])
+    if name=='hand_hgb':
+        return Pipeline([
+          ('imp',SimpleImputer(strategy='median')),
+          ('m',HistGradientBoostingClassifier(max_iter=150,learning_rate=.035,max_leaf_nodes=7,l2_regularization=5.0,random_state=seed))
+        ])
+    if name=='spatial_extra':
+        return Pipeline([
+          ('imp',SimpleImputer(strategy='median')),
+          ('m',ExtraTreesClassifier(n_estimators=400,max_depth=7,min_samples_leaf=10,max_features=.7,class_weight='balanced',random_state=seed,n_jobs=-1))
+        ])
+    raise KeyError(name)
+
+def ecdf_apply(ref, vals):
+    s=np.sort(np.asarray(ref,float))
+    return np.searchsorted(s,np.asarray(vals,float),side='right')/(len(s)+1.0)
+
+outer=list(StratifiedGroupKFold(n_splits=5,shuffle=True,random_state=42).split(np.zeros(len(y)),y,groups))
+Ptest={n:np.full(len(y),np.nan) for n in names}
+Prank=np.full(len(y),np.nan)
+Prawmean=np.full(len(y),np.nan)
+fold_rows=[]
+
+for of,(tr,te) in enumerate(outer,1):
+    ytr=y[tr];gtr=groups[tr]
+    inner=list(StratifiedGroupKFold(n_splits=4,shuffle=True,random_state=700+of).split(np.zeros(len(tr)),ytr,gtr))
+    Zin=np.full((len(tr),len(names)),np.nan)
+    Zte=np.zeros((len(te),len(names)),float)
+
+    for j,n in enumerate(names):
+        xx=X[n]
+        for ii,(itr,iva) in enumerate(inner,1):
+            m=make_model(n,10000+of*100+j*10+ii)
+            m.fit(xx[tr][itr],ytr[itr])
+            Zin[iva,j]=m.predict_proba(xx[tr][iva])[:,1]
+        m=make_model(n,20000+of*100+j)
+        m.fit(xx[tr],ytr)
+        Zte[:,j]=m.predict_proba(xx[te])[:,1]
+        Ptest[n][te]=Zte[:,j]
+
+    # fully label-free score harmonization learned only from outer-train inner-OOF scores
+    Rin=np.zeros_like(Zin); Rte=np.zeros_like(Zte)
+    for j in range(len(names)):
+        Rin[:,j]=ecdf_apply(Zin[:,j],Zin[:,j])
+        Rte[:,j]=ecdf_apply(Zin[:,j],Zte[:,j])
+
+    Prank[te]=Rte.mean(axis=1)
+    Prawmean[te]=Zte.mean(axis=1)
+
+    row={'outer':of,'n_test':len(te)}
+    for j,n in enumerate(names):
+        row['inner_auc_'+n]=roc_auc_score(ytr,Zin[:,j])
+        row['test_auc_'+n]=roc_auc_score(y[te],Zte[:,j]) if len(np.unique(y[te]))>1 else np.nan
+    row['inner_rank_auc']=roc_auc_score(ytr,Rin.mean(axis=1))
+    row['test_rank_auc']=roc_auc_score(y[te],Prank[te]) if len(np.unique(y[te]))>1 else np.nan
+    fold_rows.append(row)
+    print('outer',of,'rank_inner',row['inner_rank_auc'],'rank_test',row['test_rank_auc'],flush=True)
+
+def met(name,p):
+    q=(p>=.5).astype(int)
+    print(name,'AUC',roc_auc_score(y,p),'ACC',accuracy_score(y,q),'BA',balanced_accuracy_score(y,q),flush=True)
+
+for n in names: met('BASE_'+n,Ptest[n])
+met('RAW_MEAN7',Prawmean)
+met('NESTED_ECDF_RANK7',Prank)
+
+# disagreement-aware gate, deployable because all values are outer-train calibrated CDF scores
+# reconstruct per-image calibrated candidate ranks fold-wise
+Rall=np.full((len(y),len(names)),np.nan)
+for of,(tr,te) in enumerate(outer,1):
+    # regenerate reference inner predictions only for rank map (already expensive but correctness > speed)
+    ytr=y[tr];gtr=groups[tr]
+    inner=list(StratifiedGroupKFold(n_splits=4,shuffle=True,random_state=700+of).split(np.zeros(len(tr)),ytr,gtr))
+    for j,n in enumerate(names):
+        xx=X[n]; zin=np.full(len(tr),np.nan)
+        for ii,(itr,iva) in enumerate(inner,1):
+            m=make_model(n,10000+of*100+j*10+ii)
+            m.fit(xx[tr][itr],ytr[itr]);zin[iva]=m.predict_proba(xx[tr][iva])[:,1]
+        Rall[te,j]=ecdf_apply(zin,Ptest[n][te])
+
+conf=np.abs(Prank-.5);dis=Rall.std(axis=1);gate_score=conf/(0.05+dis)
+for cov in [.9,.8,.7,.6,.5,.4]:
+    th=np.quantile(gate_score,1-cov);mask=gate_score>=th
+    print('GATE','coverage',round(mask.mean(),3),'AUC',roc_auc_score(y[mask],Prank[mask]),'ACC',accuracy_score(y[mask],(Prank[mask]>=.5).astype(int)),'BA',balanced_accuracy_score(y[mask],(Prank[mask]>=.5).astype(int)),flush=True)
+
+out=base[['imageID','label','group_safe']].copy();out['y_true']=y
+for n,p in Ptest.items():out['p_'+n]=p
+out['p_raw_mean7']=Prawmean;out['p_nested_ecdf_rank7']=Prank;out['gate_score']=gate_score
+out.to_csv(ROOT/'oocqa_nested_rank7_strict_oof.csv',index=False)
+pd.DataFrame(fold_rows).to_csv(ROOT/'oocqa_nested_rank7_strict_folds.csv',index=False)
+print('saved',flush=True)

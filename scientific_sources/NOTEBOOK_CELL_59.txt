@@ -1,0 +1,267 @@
+import io
+import zipfile
+import torch
+import numpy as np
+import pandas as pd
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms import InterpolationMode
+
+checkpoint_path = ROOT / "efficientnet_patch_aspect_checkpoint.csv"
+final_path = ROOT / "efficientnet_patch_aspect_embeddings_3072.csv"
+
+# =========================================================
+# PREPROCESSAMENTO SEM DISTORÇÃO
+# resize proporcional + padding
+# =========================================================
+
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
+normalize = transforms.Normalize(
+    mean=IMAGENET_MEAN,
+    std=IMAGENET_STD
+)
+
+to_tensor = transforms.ToTensor()
+
+def resize_with_padding(img, target=224):
+    """
+    Mantém proporção original.
+    Redimensiona até caber em target x target.
+    Completa o restante com padding preto.
+    """
+    w, h = img.size
+
+    scale = min(target / w, target / h)
+
+    new_w = max(1, round(w * scale))
+    new_h = max(1, round(h * scale))
+
+    resized = img.resize(
+        (new_w, new_h),
+        Image.Resampling.BILINEAR
+    )
+
+    canvas = Image.new(
+        "RGB",
+        (target, target),
+        (0, 0, 0)
+    )
+
+    left = (target - new_w) // 2
+    top = (target - new_h) // 2
+
+    canvas.paste(resized, (left, top))
+
+    x = to_tensor(canvas)
+    x = normalize(x)
+
+    return x
+
+
+# =========================================================
+# 3 x 3 PATCHES NA IMAGEM ORIGINAL
+# =========================================================
+
+def make_patches_original(img):
+    w, h = img.size
+
+    xs = [
+        0,
+        w // 3,
+        (2 * w) // 3,
+        w
+    ]
+
+    ys = [
+        0,
+        h // 3,
+        (2 * h) // 3,
+        h
+    ]
+
+    patches = []
+
+    for yi in range(3):
+        for xi in range(3):
+
+            patch = img.crop(
+                (
+                    xs[xi],
+                    ys[yi],
+                    xs[xi + 1],
+                    ys[yi + 1]
+                )
+            )
+
+            patches.append(patch)
+
+    return patches
+
+
+# =========================================================
+# CHECKPOINT
+# =========================================================
+
+done_ids = set()
+
+if checkpoint_path.exists():
+
+    existing = pd.read_csv(checkpoint_path)
+
+    done_ids = set(
+        existing["imageID"].astype(str)
+    )
+
+    print(
+        "Retomando checkpoint:",
+        len(done_ids)
+    )
+
+else:
+    print("Iniciando do zero.")
+
+
+todo_df = zip_df[
+    ~zip_df["imageID"]
+    .astype(str)
+    .isin(done_ids)
+].copy()
+
+print("Restantes:", len(todo_df))
+
+
+# =========================================================
+# EXTRAÇÃO
+# =========================================================
+
+eff_model.eval()
+
+buffer_rows = []
+
+with zipfile.ZipFile(zip_path, "r") as z:
+
+    for n, (_, row) in enumerate(
+        todo_df.iterrows(),
+        start=1
+    ):
+
+        image_id = str(row["imageID"])
+
+        with z.open(row["zip_path"]) as f:
+            img = Image.open(
+                io.BytesIO(f.read())
+            ).convert("RGB")
+
+        patches = make_patches_original(img)
+
+        # imagem inteira + 9 regiões
+        regions = [img] + patches
+
+        tensors = torch.stack([
+            resize_with_padding(region)
+            for region in regions
+        ])
+
+        with torch.no_grad():
+            emb = (
+                eff_model(tensors)
+                .cpu()
+                .numpy()
+            )
+
+        global_emb = emb[0]
+        patch_embs = emb[1:]
+
+        # informação média
+        patch_mean = patch_embs.mean(axis=0)
+
+        # informação localizada extrema
+        patch_max = patch_embs.max(axis=0)
+
+        out = {
+            "imageID": image_id,
+            "cell_type": row["cell_type_zip"],
+            "label": row["label_zip"],
+            "batch": row["batch"]
+        }
+
+        for j, value in enumerate(global_emb):
+            out[f"g{j}"] = float(value)
+
+        for j, value in enumerate(patch_mean):
+            out[f"m{j}"] = float(value)
+
+        for j, value in enumerate(patch_max):
+            out[f"x{j}"] = float(value)
+
+        buffer_rows.append(out)
+
+        # checkpoint a cada 100
+        if n % 100 == 0 or n == len(todo_df):
+
+            chunk = pd.DataFrame(buffer_rows)
+
+            if checkpoint_path.exists():
+
+                chunk.to_csv(
+                    checkpoint_path,
+                    mode="a",
+                    header=False,
+                    index=False
+                )
+
+            else:
+
+                chunk.to_csv(
+                    checkpoint_path,
+                    index=False
+                )
+
+            buffer_rows = []
+
+            print(
+                f"Processadas: "
+                f"{len(done_ids) + n}/3072 "
+                "| checkpoint salvo"
+            )
+
+
+# =========================================================
+# CONSOLIDAR
+# =========================================================
+
+patch_aspect_df = pd.read_csv(
+    checkpoint_path
+)
+
+patch_aspect_df = (
+    patch_aspect_df
+    .drop_duplicates("imageID")
+    .reset_index(drop=True)
+)
+
+patch_aspect_df.to_csv(
+    final_path,
+    index=False
+)
+
+print("\n================================")
+print("FINALIZADO")
+print("================================")
+
+print(
+    "Imagens:",
+    len(patch_aspect_df)
+)
+
+print(
+    "Dimensão:",
+    patch_aspect_df.shape
+)
+
+print(
+    "Arquivo:",
+    final_path
+)

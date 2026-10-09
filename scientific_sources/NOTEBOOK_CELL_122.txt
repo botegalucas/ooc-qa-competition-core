@@ -1,0 +1,299 @@
+# ================================================================
+# OoC-QA — CPU LAST SHOT v2
+# EfficientNet embeddings -> fold-safe PCA -> Logistic Regression
+# -> 21-group strict OOF -> fixed 50/50 rank fusion RAW_MEAN7
+#
+# ZERO GPU | ZERO alteração do FREEZE | merge seguro por imageID
+# ================================================================
+
+import os
+import numpy as np
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, balanced_accuracy_score
+
+ROOT = "/teamspace/studios/this_studio/AI4S_OOC"
+
+EMB = os.path.join(
+    ROOT, "efficientnet_patch_aspect_embeddings_3072.csv"
+)
+
+BASE = os.path.join(
+    ROOT, "FINAL_DEMO_EVIDENCE_GATE_PER_IMAGE.csv"
+)
+
+print("="*70)
+print("CARREGANDO")
+print("="*70)
+
+emb = pd.read_csv(EMB)
+base = pd.read_csv(BASE)
+
+print("Embeddings:", emb.shape)
+print("Base:", base.shape)
+
+# ================================================================
+# 1. MERGE EXPLÍCITO POR imageID
+# ================================================================
+
+needed = ["imageID", "y_true", "group_safe", "p_raw_mean7"]
+
+missing = [c for c in needed if c not in base.columns]
+if missing:
+    raise ValueError(f"BASE sem colunas necessárias: {missing}")
+
+if "imageID" not in emb.columns:
+    raise ValueError("Embeddings sem imageID.")
+
+if emb["imageID"].duplicated().any():
+    raise ValueError("STOP: imageID duplicado nos embeddings.")
+
+if base["imageID"].duplicated().any():
+    raise ValueError("STOP: imageID duplicado na base.")
+
+df = base[needed].merge(
+    emb,
+    on="imageID",
+    how="inner",
+    validate="one_to_one"
+)
+
+print("\nApós merge:", df.shape)
+
+if len(df) != 3072:
+    raise ValueError(
+        f"STOP: merge produziu {len(df)} linhas, esperado 3072."
+    )
+
+if df["group_safe"].nunique() != 21:
+    raise ValueError(
+        f"STOP: {df['group_safe'].nunique()} grupos, esperado 21."
+    )
+
+print("21 grupos confirmados.")
+print("3072 imagens confirmadas.")
+
+# ================================================================
+# 2. SANITY CHECK DO BASELINE
+# ================================================================
+
+y = df["y_true"].astype(int).values
+groups = df["group_safe"].values
+raw = df["p_raw_mean7"].astype(float).values
+
+raw_auc = roc_auc_score(y, raw)
+
+print(f"\nRAW_MEAN7 encontrado = {raw_auc:.6f}")
+
+if abs(raw_auc - 0.737774) > 0.002:
+    raise ValueError(
+        "STOP: RAW_MEAN7 não corresponde ao freeze esperado 0.737774."
+    )
+
+print("Baseline congelado confirmado.")
+
+# ================================================================
+# 3. FEATURES
+#
+# g = global
+# m = patch mean
+# x = patch max/aspect representation
+#
+# Não usamos metadata/label.
+# ================================================================
+
+feat_cols = [
+    c for c in emb.columns
+    if (
+        c.startswith("g")
+        or c.startswith("m")
+        or c.startswith("x")
+    )
+    and c[1:].isdigit()
+]
+
+print("\nFeatures detectadas:", len(feat_cols))
+
+if len(feat_cols) < 100:
+    raise ValueError("STOP: features não detectadas corretamente.")
+
+X = (
+    df[feat_cols]
+    .replace([np.inf, -np.inf], np.nan)
+    .fillna(0)
+    .values
+    .astype(np.float32)
+)
+
+print("X:", X.shape)
+
+# ================================================================
+# 4. STRICT 21-GROUP OOF
+#
+# IMPORTANTÍSSIMO:
+# scaler + PCA treinados SOMENTE no train de cada fold.
+# ================================================================
+
+oof = np.full(len(df), np.nan)
+
+ug = np.unique(groups)
+
+print("\n" + "="*70)
+print("21-GROUP STRICT OOF")
+print("="*70)
+
+for i, g in enumerate(ug, 1):
+
+    va = groups == g
+    tr = ~va
+
+    Xtr = X[tr]
+    Xva = X[va]
+    ytr = y[tr]
+
+    # ---------- scaler TRAIN ONLY ----------
+    scaler = StandardScaler()
+
+    Xtr_s = scaler.fit_transform(Xtr)
+    Xva_s = scaler.transform(Xva)
+
+    # ---------- PCA TRAIN ONLY ----------
+    ncomp = min(
+        128,
+        Xtr_s.shape[0] - 1,
+        Xtr_s.shape[1]
+    )
+
+    pca = PCA(
+        n_components=ncomp,
+        svd_solver="randomized",
+        random_state=42
+    )
+
+    Xtr_p = pca.fit_transform(Xtr_s)
+    Xva_p = pca.transform(Xva_s)
+
+    # ---------- classifier ----------
+    clf = LogisticRegression(
+        C=1.0,
+        class_weight="balanced",
+        solver="liblinear",
+        max_iter=3000,
+        random_state=42
+    )
+
+    clf.fit(Xtr_p, ytr)
+
+    oof[va] = clf.predict_proba(Xva_p)[:, 1]
+
+    print(
+        f"{i:02d}/21 | group={str(g):>8} | "
+        f"train={tr.sum():4d} | val={va.sum():4d}"
+    )
+
+if np.isnan(oof).any():
+    raise ValueError("STOP: OOF contém NaN.")
+
+# ================================================================
+# 5. MODELO NOVO
+# ================================================================
+
+new_auc = roc_auc_score(y, oof)
+
+new_pred = (oof >= 0.5).astype(int)
+new_ba = balanced_accuracy_score(y, new_pred)
+
+print("\n" + "="*70)
+print("PCA-EMBEDDING")
+print("="*70)
+
+print(f"AUC = {new_auc:.6f}")
+print(f"BA  = {new_ba:.6f}")
+
+# ================================================================
+# 6. FUSÃO FIXA 50/50 POR RANK
+#
+# Nenhum tuning de peso.
+# ================================================================
+
+rank_raw = pd.Series(raw).rank(
+    pct=True,
+    method="average"
+).values
+
+rank_new = pd.Series(oof).rank(
+    pct=True,
+    method="average"
+).values
+
+fused = 0.5 * rank_raw + 0.5 * rank_new
+
+fused_auc = roc_auc_score(y, fused)
+
+print("\n" + "="*70)
+print("FIXED 50/50 RANK FUSION")
+print("="*70)
+
+print(f"RAW_MEAN7 : {raw_auc:.6f}")
+print(f"PCA-EMB   : {new_auc:.6f}")
+print(f"FUSION    : {fused_auc:.6f}")
+print(f"DELTA     : {fused_auc - raw_auc:+.6f}")
+
+# ================================================================
+# 7. COMPLEMENTARIDADE
+# ================================================================
+
+corr = np.corrcoef(rank_raw, rank_new)[0,1]
+
+print(f"\nRank correlation RAW vs PCA = {corr:.4f}")
+
+# ================================================================
+# 8. GO / NO-GO
+# ================================================================
+
+print("\n" + "="*70)
+print("RED TEAM VERDICT")
+print("="*70)
+
+if fused_auc >= 0.758:
+
+    print(">>> GO FORTE <<<")
+    print("Ganho grande o suficiente para auditoria imediata.")
+    verdict = "GO_FORTE"
+
+elif fused_auc >= 0.750:
+
+    print(">>> GO CONDICIONAL <<<")
+    print("Vale UMA auditoria adicional curta.")
+    verdict = "GO_CONDICIONAL"
+
+else:
+
+    print(">>> NO-GO <<<")
+    print("NÃO MEXER MAIS — fechar submissão.")
+    verdict = "NO_GO"
+
+# ================================================================
+# 9. SALVAR APENAS EXPERIMENTO ISOLADO
+# ================================================================
+
+out = df[
+    ["imageID", "y_true", "group_safe", "p_raw_mean7"]
+].copy()
+
+out["p_pca_embedding_cpu"] = oof
+out["p_fusion_50_50"] = fused
+
+OUT = os.path.join(
+    ROOT,
+    "EXPERIMENT_CPU_PCA_EMBEDDING_OOF.csv"
+)
+
+out.to_csv(OUT, index=False)
+
+print("\nExperimento salvo isoladamente:")
+print(OUT)
+
+print("\nFREEZE ORIGINAL NÃO FOI ALTERADO.")

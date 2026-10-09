@@ -1,0 +1,20 @@
+import torch
+from torchvision.models import (
+    efficientnet_b0,
+    EfficientNet_B0_Weights
+)
+
+eff_weights = EfficientNet_B0_Weights.DEFAULT
+eff_model = efficientnet_b0(weights=eff_weights)
+
+# Remove o classificador final:
+# saída passa a ser embedding de 1280 dimensões
+eff_model.classifier = torch.nn.Identity()
+
+eff_model.eval()
+
+eff_preprocess = eff_weights.transforms()
+
+print("EfficientNet-B0 carregada.")
+print("Embedding esperado: 1280 dimensões")
+print("CUDA disponível:", torch.cuda.is_available())
