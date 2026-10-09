@@ -1,4 +1,8 @@
+# Submission category: Tool & Platform
+
 # OoC-QA — Technical Report | AI4S Tool & Platform
+
+**Team declaration:** Independent project submission led by the project owner. No cross-disciplinary team bonus is claimed. Verify registered member information in the official Kaggle Writeup and registration form before submitting.
 
 ## Purpose and implemented product
 OoC-QA is a research prototype and retrospective evidence replay for quality assessment in organ-on-a-chip brightfield microscopy. It displays recorded, group-held-out out-of-fold (OOF) scores on authentic microscopy images, applies a fixed abstention gate and offers context references in an Atlas. It does not currently infer on new uploaded images, perform human review, provide clinical advice or claim external laboratory validation.
