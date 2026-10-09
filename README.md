@@ -84,3 +84,8 @@ reproduction code may not be hidden in a Commercial Core. No clinical or externa
 
 ## Release review
 See REPRODUCTION_STATUS.md for L1/L2 versus incomplete L3 and LICENSE_SCOPE.md for per-component rights. scientific_reproduction_draft/ is preserved as unexecuted candidate methodology, not a certified training pipeline. No implemented proprietary Commercial Core is claimed.
+
+
+### Independent CPU fold reproduction (2026-10-09)
+
+A separate owner-executed CPU rerun completed all 21 fold-local PCA/LR fits on the frozen 3072 × 3840 embeddings: AUC 0.783030073 versus historical 0.783034809 (absolute delta 0.000004736), BA 0.711545474 in both, maximum paired probability difference 0.000328336. This strengthens scientific repeatability **from saved embeddings**, not from raw microscopy. The log and SHA256 identities are summarized in REPRODUCTION_STATUS.md. Source CSV (~230 MB) and the full raw-image reconstruction remain unavailable to public users; do not claim end-to-end L3 certification.
