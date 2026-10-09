@@ -74,7 +74,7 @@ No serialized PCA/scaler/LR deployment bundle was located in AI4S_OOC. New-image
 
 ## Rights and release
 
-PRIVATE CANDIDATE. Apache-2.0 is the documented candidate for eligible original code; no final license grant is applied. Do not publish this directory
+PRIVATE CANDIDATE. Apache-2.0 text is included for eligible original participant-owned application/evaluation code, as delimited in LICENSE_SCOPE.md. Do not publish this directory
 until the owner approves a competition-compatible license and the release blockers are closed.
 Existing microscopy, pretrained extractor and libraries are preexisting work. Competition work
 includes group-safe evaluation, fold-local PCA-LR OOF, evidence abstention and contextual replay;
