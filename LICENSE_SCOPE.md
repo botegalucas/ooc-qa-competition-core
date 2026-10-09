@@ -1,12 +1,17 @@
-# Rights scope — no blanket license grant
+# Competition Core — license scope
 
-This is a private release candidate. Apache-2.0 is the owner's documented candidate for participant-owned original Competition Core code, conditional on ownership and compatibility review. No repository-wide LICENSE is applied in this audit.
+The unmodified Apache License, Version 2.0 text is included in `LICENSE`. The project owner elects Apache-2.0 for **original participant-owned application and evaluation source code**, to the extent the owner holds the necessary rights: `app/*.py`, `src/*.py`, `evaluate.py`, `verify_package.py`, and `tests/*.py`. Third-party code portions, if any, remain governed by their respective terms.
 
-- `app/*.py`, `src/*.py`, `evaluate.py`, `verify_package.py`, `tests/*.py`: proposed original-code scope, pending final ownership confirmation and explicit application of the license.
-- `scientific_sources/*.txt` and `scientific_reproduction_draft/*.py`: essential method/reproduction evidence remains included; provenance and code ownership must be checked before applying a license. Historical source extracts are not silently relicensed.
-- `data/images/*.png`: third-party Movčana et al. dataset, CC BY 4.0; author list, source DOI and unchanged-byte notice are in `provenance/DATASET_LICENSE_CERTIFICATION.md`. Apache-2.0 must not replace these image terms.
-- CSV scientific outputs and manifests: separate data/output ownership and release scope require confirmation; no implicit Apache grant.
-- Dependency packages and extractor implementation/weights retain their own terms; dependency metadata is not a complete legal certification of every transitive package.
-- Video, narration, fonts, music and slide art are not part of this repository.
+**Not relicensed by Apache-2.0:**
+- `data/images/*.png`: authentic Movčana et al. microscopy, separately licensed CC BY 4.0. Preserve attribution, source DOI, and unchanged-image notice in `provenance/DATASET_LICENSE_CERTIFICATION.md`.
+- `data/*.csv`, scientific outputs and manifests: project research/data artifacts with separately documented provenance. Inclusion in the repository is not a claim that these are Apache-2.0 source code.
+- `scientific_sources/*.txt`: verbatim recovered historical method extracts; their original attribution/provenance must be preserved, and their inclusion alone does not certify independent reproduction or blanket licensing.
+- `scientific_reproduction_draft/*`: historical scientific draft and input data, preserved as evidence; ownership and relevant third-party terms must be confirmed before asserting a separate Apache code grant.
+- Pretrained weights, PyTorch/torchvision and all third-party dependencies: each retains its own terms. Pretrained weights are not included with this replay demonstration.
+- Video, slides, narration, fonts, music and conceptual artwork: **not distributed in this repository**.
 
-Only independently developed future integrations, services or other genuinely separate commercial work may remain reserved. No implemented Commercial Core is claimed. Essential code for the scientific claims must not be withheld while those claims are described as reproducible. Open licensing of original code can permit commercial reuse; it is not exclusivity or an agreement with judges or organizers.
+The tested tool is a retrospective OOF evidence replay, not fresh-image inference. Evaluation of frozen probabilities and replay are reproducible (L1/L2). The original 21-fold experiment was executed historically, but independent raw-image-to-OOF reproduction (L3) has not been certified. Do not represent preserved notebook excerpts as a validated standalone full training pipeline.
+
+**Commercial boundary:** Apache-2.0 permits commercial use of the code it covers without royalties. Independently developed future integrations, support, hosting, know-how and separate proprietary services can be sold but are not claimed to exist today. Trademark and third-party rights are not granted by this notice.
+
+**Pre-publication checks still required:** confirm ownership and third-party portions of included code and scientific materials; confirm rules and complete source/data attribution; verify necessary reproduction instructions; and obtain the project owner's separate authorization to change repository visibility or submit on Kaggle. The original preparation repository remains private.
