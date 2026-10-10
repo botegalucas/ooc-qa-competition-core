@@ -1,4 +1,4 @@
-# OoC-QA — Competition Core release candidate (PRIVATE)
+# OoC-QA — Competition Core (AI4S submitted)
 
 Retrospective group-held-out OOF replay — not new-image inference.
 
@@ -74,8 +74,7 @@ No serialized PCA/scaler/LR deployment bundle was located in AI4S_OOC. New-image
 
 ## Rights and release
 
-PRIVATE CANDIDATE. Apache-2.0 text is included for eligible original participant-owned application/evaluation code, as delimited in LICENSE_SCOPE.md. Do not publish this directory
-until the owner approves a competition-compatible license and the release blockers are closed.
+PUBLIC COMPETITION CORE. Apache-2.0 text is included for eligible original participant-owned application/evaluation code, as delimited in LICENSE_SCOPE.md. Third-party microscopy, scientific data and pretrained weights retain their separate rights and limitations.
 Existing microscopy, pretrained extractor and libraries are preexisting work. Competition work
 includes group-safe evaluation, fold-local PCA-LR OOF, evidence abstention and contextual replay;
 this technical audit adds integrity tests/documentation without changing frozen science.
