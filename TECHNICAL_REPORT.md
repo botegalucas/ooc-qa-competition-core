@@ -2,13 +2,13 @@
 
 # OoC-QA — Technical Report | AI4S Tool & Platform
 
-**Team declaration:** Independent project submission led by the project owner. No cross-disciplinary team bonus is claimed. Verify registered member information in the official Kaggle Writeup and registration form before submitting.
+**Team declaration:** Independent project submission led by the project owner. No cross-disciplinary team bonus is claimed. The owner reports that the Kaggle Writeup was submitted; registration details are not independently certified by this technical report.
 
 ## Purpose and implemented product
 OoC-QA is a research prototype and retrospective evidence replay for quality assessment in organ-on-a-chip brightfield microscopy. It displays recorded, group-held-out out-of-fold (OOF) scores on authentic microscopy images, applies a fixed abstention gate and offers context references in an Atlas. It does not currently infer on new uploaded images, perform human review, provide clinical advice or claim external laboratory validation.
 
 ## Data
-The source is the Organ-on-a-Chip Image Dataset (Movčana et al., 2023), Zenodo DOI 10.5281/zenodo.10203721, CC BY 4.0. The historical evaluation uses 3,072 image records and six cell types with dataset GOOD/BAD labels. The 21 group_safe units are conservative acquisition/dependency proxies, not 21 independent experiments. The public candidate includes 37 intact representative micrographs identified in image manifests.
+The source is the Organ-on-a-Chip Image Dataset (Movčana et al., 2023), Zenodo DOI 10.5281/zenodo.10203721, CC BY 4.0. The historical evaluation uses 3,072 image records and six cell types with dataset GOOD/BAD labels. The 21 group_safe units are conservative acquisition/dependency proxies, not 21 independent experiments. The public Competition Core includes 37 intact representative micrographs identified in image manifests.
 
 ## Historical method
 Pretrained EfficientNet-B0 produces global 1,280D, 3x3 patch-mean 1,280D and 3x3 patch-max 1,280D representations (3,840D in total), after aspect-preserving RGB letterboxing and ImageNet normalization. Historical fold-local StandardScaler, PCA128 (randomized, seed42) and balanced Logistic Regression (C=1, liblinear, max_iter3000, seed42) generate held-out probabilities across 21 group-safe folds. The current executable demo only replays the saved scores.
@@ -39,4 +39,4 @@ Original participant-owned app/evaluation source is offered under Apache-2.0 sub
 ## Presentation
 Video: https://www.youtube.com/watch?v=Ny-8awT0aOg (accessible by link, unlisted at report time).
 Submission track: Tool & Platform.
-Competition Core: https://github.com/botegalucas/ooc-qa-competition-core (private pending owner's separate publication authorization).
+Competition Core: https://github.com/botegalucas/ooc-qa-competition-core (public; project owner confirmed submission to AI4S).
