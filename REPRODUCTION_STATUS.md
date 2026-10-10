@@ -1,6 +1,6 @@
 # Reproduction status and boundaries
 
-Private audited candidate, 2026-10-09. Not a published competition submission.
+Audited Competition Core, initially prepared 2026-10-09; subsequently published and submitted to the AI4S competition.
 
 L1 = numerical evaluation of the included frozen OOF predictions. L2 = deterministic retrospective evidence replay, authentic image checks and application tests. L3 = independent raw-image → embeddings → fold-local fitting → OOF reproduction.
 
@@ -12,7 +12,7 @@ Outstanding L3 items: public availability or regenerability of the feature table
 
 The official AI4S overview requires reproducible public code, including core sources, environment, model files/download instructions, entry scripts and input/output documentation. It lists testing, inference, evaluation **or** demo scripts; it does not explicitly mandate new-image inference or independent retraining before submission. Therefore a truthfully scoped replay can demonstrate the tool's implemented operations. It cannot certify the full scientific training claim, and eligibility or judges' interpretation cannot be guaranteed by this repository. Do not present the replay as an end-to-end image classifier.
 
-Current package readiness is distinct from public-submission readiness. Public repository/video/report links and registration are still required and no publication has been authorized.
+The Competition Core repository is public and the project owner has confirmed AI4S Kaggle submission. This document does not independently verify all registration details or resolve the remaining L3 scientific limitations.
 
 
 ## Independent CPU fold reproduction — 2026-10-09 (user-run receipt)
